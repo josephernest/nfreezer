@@ -13,8 +13,7 @@ Use case: you can store your private data on a friend's computer, or on a remote
         
 * **incremental and resumable**: if the data is already there on the remote server, it won't be resent during the next sync. If the sync is interrupted in the middle, it will continue where it stopped (last non-fully-uploaded file). Deleted or modified files in the meantime will of course be detected.
 
-* ![image](https://user-images.githubusercontent.com/6168083/100476609-4f8a3100-30e6-11eb-8d16-cc59b352576e.png)
- **graceful file moves/renames/data duplication handling**: if you move `/path/to/10GB_file` to `/anotherpath/subdir/10GB_file_renamed`, no data will be re-transferred over the network.
+* ![image](https://user-images.githubusercontent.com/6168083/100476609-4f8a3100-30e6-11eb-8d16-cc59b352576e.png) **graceful file moves/renames/data duplication handling**: if you move `/path/to/10GB_file` to `/anotherpath/subdir/10GB_file_renamed`, no data will be re-transferred over the network.
 
   This is supported by some other sync programs, but *very rarely* in encrypted-at-rest mode.
 
@@ -63,7 +62,7 @@ Alternatively, if you prefer, you can also copy the remote backuped files (encry
 
 ## Comparison
 
-These are the key points that were important *for me*, and that's why I coded this tool, but I totally agree it's subjective, and one could easily make a  similar table with all the boxes checked for another program and none for mine.
+These are the key points that were important *for me*, and that's why I coded this tool, but I totally agree it's subjective, and one could easily make a similar table with all the boxes checked for another program and none for mine.
 
 Not handling renames gracefully (and thus retransfer data over the network again and again) was a no-go for me because I often move or rename directories containing multimedia projects with gigabytes of data.
 
