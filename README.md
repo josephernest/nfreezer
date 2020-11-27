@@ -13,7 +13,8 @@ Use case: you can store your private data on a friend's computer, or on a remote
         
 * **incremental and resumable**: if the data is already there on the remote server, it won't be resent during the next sync. If the sync is interrupted in the middle, it will continue where it stopped (last non-fully-uploaded file). Deleted or modified files in the meantime will of course be detected.
 
-* **graceful file moves/renames/data duplication handling**: if you move `/path/to/10GB_file` to `/anotherpath/subdir/10GB_file_renamed`, no data will be re-transferred over the network.
+* ![image](https://user-images.githubusercontent.com/6168083/100476609-4f8a3100-30e6-11eb-8d16-cc59b352576e.png)
+ **graceful file moves/renames/data duplication handling**: if you move `/path/to/10GB_file` to `/anotherpath/subdir/10GB_file_renamed`, no data will be re-transferred over the network.
 
   This is supported by some other sync programs, but *very rarely* in encrypted-at-rest mode.
 
