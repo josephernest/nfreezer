@@ -2,7 +2,9 @@
 
 https://nfreezer.com
 
-nFreezer (for *e<b>n</b>crypted freezer*) is an **encrypted-at-rest backup tool**, designed specifically for the case when the destination server is *untrusted*. With nFreezer, the data is safe on the destination server **even** if a malicious user gets root access to it.  
+![](https://user-images.githubusercontent.com/6168083/100474871-f8825d00-30e1-11eb-8e74-6321aafe2151.png)
+
+**nFreezer** (for *e<b>n</b>crypted freezer*) is an **encrypted-at-rest backup tool**, designed specifically for the case when the destination server is *untrusted*. With nFreezer, the data is safe on the destination server **even** if a malicious user gets root access to it.  
 Use case: you can store your private data on a friend's computer, or on a remote server on which you never had physical access and that you don't fully trust.
 
 ## Features
