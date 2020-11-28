@@ -79,7 +79,7 @@ In order to keep the small-single-file requirement and because maintaining and m
 
 However, Github issues, including snippets of code, are welcome.
 
-## Developement 
+## Development 
 
 This software is in the early stages of its distribution, at the time of writing (Nov. 2020), so use it at your own risk, and please don't use it for data for which you don't have other backup.
 
