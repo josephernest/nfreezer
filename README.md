@@ -1,6 +1,6 @@
 # nFreezer
 
-https://nfreezer.com
+http://nfreezer.com
 
 ![](https://user-images.githubusercontent.com/6168083/100474871-f8825d00-30e1-11eb-8e74-6321aafe2151.png)
 
