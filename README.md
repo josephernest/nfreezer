@@ -90,3 +90,5 @@ Joseph Ernest
 ## License
 
 MIT with free-of-charge-redistribution clause, see the LICENSE file.
+
+![](https://nfreezer.com/pixel/nfreezer.png)
