@@ -87,6 +87,14 @@ This software is in the early stages of its distribution, at the time of writing
 
 Joseph Ernest
 
+## Sponsors and consulting
+
+I am available for Python, Data science, ML, Automation consulting. Please contact me on https://afewthingz.com for freelancing requests.
+
+Do you want to support the development of my open-source projects? Please contact me!
+
+I am currently sponsored by [CodeSigningStore.com](https://codesigningstore.com). Thank you to them for providing a DigiCert Code Signing Certificate and supporting open source software.
+
 ## License
 
 MIT with free-of-charge-redistribution clause, see the LICENSE file.
