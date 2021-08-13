@@ -195,37 +195,41 @@ def backup(src=None, dest=None, sftppwd=None, encryptionpwd=None, exclusion_list
                             print(item + ": " + fn)
                             local_file_list.remove(fn)
                 print("\n\n")
-                for fn in tqdm.tqdm(local_file_list, dynamic_ncols=True, unit="file", mininterval=1, desc="Processing"):
-                    if os.path.isdir(fn):
-                        continue
-                    try:
-                        mtime = os.stat(fn).st_mtime_ns
-                    except FileNotFoundError:
-                        tqdm.tqdm.write("Not found error, skipped file %s" % fn)
-                        continue
-                    fsize = os.path.getsize(fn)
-                    if fn in DISTANTFILES and DISTANTFILES[fn][1] >= mtime and DISTANTFILES[fn][2] == fsize:
-                        tqdm.tqdm.write('Already on distant: unmodified (mtime + fsize). Skipping: %s' % fn)
-                        REQUIREDCHUNKS.add(DISTANTFILES[fn][0])
-                    else:
-                        try:
-                            h = getsha256(fn)
-                        except OSError as e:
-                            tqdm.tqdm.write(f"Skipping file, might be a UNIX special file: {e}, {fn}")
+                total_size = sum([get_size(x) for x in local_file_list])
+                with tqdm.tqdm(total=total_size, unit_scale=True, unit_divisor=1024, dynamic_ncols=True, unit="B", mininterval=1, desc="nFreezer") as pbar:
+                    for fn in local_file_list:
+                        pbar.update(get_size(fn))
+                        if os.path.isdir(fn):
                             continue
-                        if h in DISTANTHASHES:  # ex : chunk already there with same SHA256, but other filename  (case 1 : duplicate file, case 2 : renamed/moved file)
-                            tqdm.tqdm.write('New, but already on distant (same sha256). Skipping: %s' % fn)
-                            chunkid = DISTANTHASHES[h]
-                            REQUIREDCHUNKS.add(chunkid) 
+                        try:
+                            mtime = os.stat(fn).st_mtime_ns
+                        except FileNotFoundError:
+                            tqdm.tqdm.write("Not found error, skipped file %s" % fn)
+                            continue
+                        fsize = os.path.getsize(fn)
+                        if fn in DISTANTFILES and DISTANTFILES[fn][1] >= mtime and DISTANTFILES[fn][2] == fsize:
+                            tqdm.tqdm.write('Already on distant: unmodified (mtime + fsize). Skipping: %s' % fn)
+                            REQUIREDCHUNKS.add(DISTANTFILES[fn][0])
                         else:
-                            tqdm.tqdm.write('New, sending file: %s' % fn)
-                            chunkid = uuid.uuid4().bytes
-                            with sftp.open(chunkid.hex() + '.tmp', 'wb') as f_enc, open(fn, 'rb') as f:
-                                encrypt(f, key=key, salt=salt, out=f_enc)
-                            sftp.rename(chunkid.hex() + '.tmp', chunkid.hex())
-                            REQUIREDCHUNKS.add(chunkid)
-                            DISTANTHASHES[h] = chunkid
-                        flist.write(newdistantfileblock(chunkid=chunkid, mtime=mtime, fsize=fsize, h=h, fn=fn, key=key, salt=salt))         # todo: accumulate in a buffer and do this every 10 seconds instead
+                            try:
+                                h = getsha256(fn)
+                            except OSError as e:
+                                tqdm.tqdm.write(f"Skipping file, might be a UNIX special file: {e}, {fn}")
+                                continue
+                            if h in DISTANTHASHES:  # ex : chunk already there with same SHA256, but other filename  (case 1 : duplicate file, case 2 : renamed/moved file)
+                                tqdm.tqdm.write('New, but already on distant (same sha256). Skipping: %s' % fn)
+                                chunkid = DISTANTHASHES[h]
+                                REQUIREDCHUNKS.add(chunkid) 
+                            else:
+                                tqdm.tqdm.write('New, sending file: %s' % fn)
+                                chunkid = uuid.uuid4().bytes
+                                with sftp.open(chunkid.hex() + '.tmp', 'wb') as f_enc, open(fn, 'rb') as f:
+                                    encrypt(f, key=key, salt=salt, out=f_enc)
+                                sftp.rename(chunkid.hex() + '.tmp', chunkid.hex())
+                                REQUIREDCHUNKS.add(chunkid)
+                                DISTANTHASHES[h] = chunkid
+                            flist.write(newdistantfileblock(chunkid=chunkid, mtime=mtime, fsize=fsize, h=h, fn=fn, key=key, salt=salt))         # todo: accumulate in a buffer and do this every 10 seconds instead
+                pbar.close()
             delchunks = DISTANTCHUNKS - REQUIREDCHUNKS
             if len(delchunks) > 0:
                 print('Deleting %s no-longer-used distant chunks... ' % len(delchunks), end='')
