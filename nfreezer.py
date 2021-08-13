@@ -133,7 +133,7 @@ def backup(src=None, dest=None, sftppwd=None, encryptionpwd=None, exclusion_list
         sftppwd = getpass.getpass('Please enter the SFTP password for user %s: ' % user)
     if encryptionpwd is None:
         encryptionpwd = getpass.getpass('Please enter the encryption password: ')
-        encryptionpwd_check = getpass.getpass('Double check the encryption password: ')
+        encryptionpwd_check = getpass.getpass('Confirm password: ')
         if encryptionpwd != encryptionpwd_check:
             print("Passwords are not identical!")
             return
@@ -186,8 +186,8 @@ def backup(src=None, dest=None, sftppwd=None, encryptionpwd=None, exclusion_list
             REQUIREDCHUNKS = set()
             with sftp.open('.files', 'a+') as flist:
                 local_file_list = glob.glob('**/*', recursive=True)
-                print("The following files will be ignored because they match the exclusion list:")
                 local_file_list = sorted(local_file_list, key=get_size)
+                print("\n\nThe following files will be ignored because they match the exclusion list:")
                 for item in exclusion_list:
                     for fn in local_file_list:
                         if item in fn:
@@ -233,7 +233,7 @@ def restore(src=None, dest=None, sftppwd=None, encryptionpwd=None):
     """Restore encrypted files from `src` (SFTP or local path) to `dest` (local path)."""
     if encryptionpwd is None:
         encryptionpwd = getpass.getpass('Please enter the encryption password: ')
-        encryptionpwd_check = getpass.getpass('Double check the encryption password: ')
+        encryptionpwd_check = getpass.getpass('Confirm password: ')
         if encryptionpwd != encryptionpwd_check:
             print("Passwords are not identical!")
             raise SystemExit()
