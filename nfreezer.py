@@ -123,6 +123,10 @@ def backup(src=None, dest=None, sftppwd=None, encryptionpwd=None, exclusion_list
         sftppwd = getpass.getpass('Please enter the SFTP password for user %s: ' % user)
     if encryptionpwd is None:
         encryptionpwd = getpass.getpass('Please enter the encryption password: ')
+        encryptionpwd_check = getpass.getpass('Double check the encryption password: ')
+        if encryptionpwd != encryptionpwd_check:
+            print("Passwords are not identical!")
+            raise SystemExit()
     key, salt = KDF(encryptionpwd)        
     try:
         with pysftp.Connection(host, username=user, password=sftppwd) as sftp:
@@ -218,6 +222,10 @@ def restore(src=None, dest=None, sftppwd=None, encryptionpwd=None):
     """Restore encrypted files from `src` (SFTP or local path) to `dest` (local path)."""
     if encryptionpwd is None:
         encryptionpwd = getpass.getpass('Please enter the encryption password: ')
+        encryptionpwd_check = getpass.getpass('Double check the encryption password: ')
+        if encryptionpwd != encryptionpwd_check:
+            print("Passwords are not identical!")
+            raise SystemExit()
     remote, user, host, path = parseaddress(src)
     if remote:
         if sftppwd is None:
