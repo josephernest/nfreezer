@@ -17,7 +17,7 @@ Copyright (c) 2020, Joseph Ernest. See also LICENSE file.
 ==CHANGELOG==
 """
 
-import pysftp, getpass, paramiko, glob, os, hashlib, io, Crypto.Random, Crypto.Protocol.KDF, Crypto.Cipher.AES, uuid, zlib, time, pprint, sys, contextlib
+import pysftp, getpass, paramiko, glob, os, hashlib, io, Crypto.Random, Crypto.Protocol.KDF, Crypto.Cipher.AES, uuid, zlib, time, pprint, sys, contextlib, tqdm
 
 NULL16BYTES, NULL32BYTES = b'\x00' * 16, b'\x00' * 32
 BLOCKSIZE = 16*1024*1024  # 16 MB
@@ -170,21 +170,22 @@ def backup(src=None, dest=None, sftppwd=None, encryptionpwd=None):
             REQUIREDCHUNKS = set()
             with sftp.open('.files', 'a+') as flist:
                 for fn in glob.glob('**/*', recursive=True):
+                for fn in tqdm.tqdm(local_file_list, dynamic_ncols=True, unit="file", mininterval=1, desc="Processing"):
                     if os.path.isdir(fn):
                         continue
                     mtime = os.stat(fn).st_mtime_ns
                     fsize = os.path.getsize(fn)
                     if fn in DISTANTFILES and DISTANTFILES[fn][1] >= mtime and DISTANTFILES[fn][2] == fsize:
-                        print('Already on distant: unmodified (mtime + fsize). Skipping: %s' % fn)
+                        tqdm.tqdm.write('Already on distant: unmodified (mtime + fsize). Skipping: %s' % fn)
                         REQUIREDCHUNKS.add(DISTANTFILES[fn][0])
                     else:
                         h = getsha256(fn)
                         if h in DISTANTHASHES:  # ex : chunk already there with same SHA256, but other filename  (case 1 : duplicate file, case 2 : renamed/moved file)
-                            print('New, but already on distant (same sha256). Skipping: %s' % fn)
+                            tqdm.tqdm.write('New, but already on distant (same sha256). Skipping: %s' % fn)
                             chunkid = DISTANTHASHES[h]
                             REQUIREDCHUNKS.add(chunkid) 
                         else:
-                            print('New, sending file: %s' % fn)
+                            tqdm.tqdm.write('New, sending file: %s' % fn)
                             chunkid = uuid.uuid4().bytes
                             with sftp.open(chunkid.hex() + '.tmp', 'wb') as f_enc, open(fn, 'rb') as f:
                                 encrypt(f, key=key, salt=salt, out=f_enc)
