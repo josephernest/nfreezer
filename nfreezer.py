@@ -115,6 +115,12 @@ def backup(src=None, dest=None, sftppwd=None, encryptionpwd=None, exclusion_list
     if exclusion_list == None or not isinstance(exclusion_list, list):
         exclusion_list = []
     remote, user, host, remotepath = parseaddress(dest)
+    if host != "localhost":
+        extra_arg = {}
+    else:  # necessary argument for pysftp in case of local dest backup
+        cnopts = pysftp.CnOpts()
+        cnopts.hostkeys = None
+        extra_arg = {"cnopts":cnopts}
     if not remote or not user or not host or not remotepath:  # either not remote (local), or remote with empty user, host or remotepath
         print('dest should use the following format: user@192.168.0.2:/path/to/backup/')
         return
@@ -129,7 +135,7 @@ def backup(src=None, dest=None, sftppwd=None, encryptionpwd=None, exclusion_list
             return
     key, salt = KDF(encryptionpwd)        
     try:
-        with pysftp.Connection(host, username=user, password=sftppwd) as sftp:
+        with pysftp.Connection(host, username=user, password=sftppwd, **extra_arg) as sftp:
             if sftp.isdir(remotepath):
                 sftp.chdir(remotepath)
             else:    
