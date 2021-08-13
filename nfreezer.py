@@ -126,7 +126,7 @@ def backup(src=None, dest=None, sftppwd=None, encryptionpwd=None, exclusion_list
         encryptionpwd_check = getpass.getpass('Double check the encryption password: ')
         if encryptionpwd != encryptionpwd_check:
             print("Passwords are not identical!")
-            raise SystemExit()
+            return
     key, salt = KDF(encryptionpwd)        
     try:
         with pysftp.Connection(host, username=user, password=sftppwd) as sftp:
