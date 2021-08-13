@@ -105,13 +105,15 @@ def parseaddress(addr):
             return True, user.strip(), host.strip(), path.strip()
     return False, None, None, addr       # not remote in all other cases
 
-def backup(src=None, dest=None, sftppwd=None, encryptionpwd=None):
+def backup(src=None, dest=None, sftppwd=None, encryptionpwd=None, exclusion_list=None):
     """Do a backup of `src` (local path) to `dest` (SFTP). The files are encrypted locally and are *never* decrypted on `dest`. Also, `dest` never gets the `encryptionpwd`."""
     if os.path.isdir(src):
         os.chdir(src)
     else:
         print('Source directory does not exist.')
         return    
+    if exclusion_list == None or not isinstance(exclusion_list, list):
+        exclusion_list = []
     remote, user, host, remotepath = parseaddress(dest)
     if not remote or not user or not host or not remotepath:  # either not remote (local), or remote with empty user, host or remotepath
         print('dest should use the following format: user@192.168.0.2:/path/to/backup/')
@@ -169,7 +171,14 @@ def backup(src=None, dest=None, sftppwd=None, encryptionpwd=None):
             ####### SEND FILES
             REQUIREDCHUNKS = set()
             with sftp.open('.files', 'a+') as flist:
-                for fn in glob.glob('**/*', recursive=True):
+                local_file_list = glob.glob('**/*', recursive=True)
+                print("The following files will be ignored because they match the exclusion list:")
+                for item in exclusion_list:
+                    for fn in local_file_list:
+                        if item in fn:
+                            print(item + ": " + fn)
+                            local_file_list.remove(fn)
+                print("\n\n")
                 for fn in tqdm.tqdm(local_file_list, dynamic_ncols=True, unit="file", mininterval=1, desc="Processing"):
                     if os.path.isdir(fn):
                         continue
@@ -260,8 +269,13 @@ def console_script():
     """Command-line script"""
     if len(sys.argv) >= 4:
         if sys.argv[1] == 'backup':
-            backup(src=sys.argv[2], dest=sys.argv[3])
+            try:
+                excl = sys.argv[4]
+            except:
+                excl = []
+            backup(src=sys.argv[2], dest=sys.argv[3], exclusion_list=excl)
         elif sys.argv[1] == 'restore':
             restore(src=sys.argv[2], dest=sys.argv[3])
     else:
-        print('Missing arguments.\nExamples:\n  nfreezer backup test/ user@192.168.0.2:/test/\n  nfreezer restore user@192.168.0.2:/test/ restored/')
+        print('Missing arguments.\nExamples:\n  nfreezer backup test/ user@192.168.0.2:/test/ \'["mkv", "avi"]\'\n  nfreezer restore user@192.168.0.2:/test/ restored/')
+
