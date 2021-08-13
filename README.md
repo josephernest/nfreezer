@@ -62,7 +62,7 @@ or, from command-line:
 
     nfreezer restore user@192.168.0.2:/test/ restored/
 
-Alternatively, if you prefer, you can also copy the remote backuped files (encrypted-at-rest) to a local directory `backup_copied/` and restore with nFreezer from this local directory:
+Alternatively, if you prefer, you can also copy the remote backed up files (encrypted-at-rest) to a local directory `backup_copied/` and restore with nFreezer from this local directory:
 
     nfreezer restore backup_copied/ restored/
 
