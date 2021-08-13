@@ -26,6 +26,10 @@ BLOCKSIZE = 16*1024*1024  # 16 MB
 def nullcontext():  # from contextlib import nullcontext for Python 3.7+
     yield None
 
+def get_size(path):
+    try: return os.stat(path).st_size
+    except: return 0
+
 def getsha256(f):
     sha256 = hashlib.sha256()
     with open(f, 'rb') as g:
@@ -183,6 +187,7 @@ def backup(src=None, dest=None, sftppwd=None, encryptionpwd=None, exclusion_list
             with sftp.open('.files', 'a+') as flist:
                 local_file_list = glob.glob('**/*', recursive=True)
                 print("The following files will be ignored because they match the exclusion list:")
+                local_file_list = sorted(local_file_list, key=get_size)
                 for item in exclusion_list:
                     for fn in local_file_list:
                         if item in fn:
