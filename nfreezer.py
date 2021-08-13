@@ -21,6 +21,7 @@ import pysftp, getpass, paramiko, glob, os, hashlib, io, Crypto.Random, Crypto.P
 
 NULL16BYTES, NULL32BYTES = b'\x00' * 16, b'\x00' * 32
 BLOCKSIZE = 16*1024*1024  # 16 MB
+larger_files_first = False
 
 @contextlib.contextmanager  
 def nullcontext():  # from contextlib import nullcontext for Python 3.7+
@@ -186,7 +187,7 @@ def backup(src=None, dest=None, sftppwd=None, encryptionpwd=None, exclusion_list
             REQUIREDCHUNKS = set()
             with sftp.open('.files', 'a+') as flist:
                 local_file_list = glob.glob('**/*', recursive=True)
-                local_file_list = sorted(local_file_list, key=get_size)
+                local_file_list = sorted(local_file_list, key=get_size, reverse=larger_files_first)
                 print("\n\nThe following files will be ignored because they match the exclusion list:")
                 for item in exclusion_list:
                     for fn in local_file_list:
