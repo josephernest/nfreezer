@@ -197,13 +197,21 @@ def backup(src=None, dest=None, sftppwd=None, encryptionpwd=None, exclusion_list
                 for fn in tqdm.tqdm(local_file_list, dynamic_ncols=True, unit="file", mininterval=1, desc="Processing"):
                     if os.path.isdir(fn):
                         continue
-                    mtime = os.stat(fn).st_mtime_ns
+                    try:
+                        mtime = os.stat(fn).st_mtime_ns
+                    except FileNotFoundError:
+                        tqdm.tqdm.write("Not found error, skipped file %s" % fn)
+                        continue
                     fsize = os.path.getsize(fn)
                     if fn in DISTANTFILES and DISTANTFILES[fn][1] >= mtime and DISTANTFILES[fn][2] == fsize:
                         tqdm.tqdm.write('Already on distant: unmodified (mtime + fsize). Skipping: %s' % fn)
                         REQUIREDCHUNKS.add(DISTANTFILES[fn][0])
                     else:
-                        h = getsha256(fn)
+                        try:
+                            h = getsha256(fn)
+                        except OSError as e:
+                            tqdm.tqdm.write(f"Skipping file, might be a UNIX special file: {e}, {fn}")
+                            continue
                         if h in DISTANTHASHES:  # ex : chunk already there with same SHA256, but other filename  (case 1 : duplicate file, case 2 : renamed/moved file)
                             tqdm.tqdm.write('New, but already on distant (same sha256). Skipping: %s' % fn)
                             chunkid = DISTANTHASHES[h]
