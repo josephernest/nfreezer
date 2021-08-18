@@ -211,7 +211,7 @@ def backup(src=None, dest=None, sftppwd=None, encryptionpwd=None, exclusion_list
                             tqdm.tqdm.write("Not found error, skipped file %s" % fn)
                             pbar.update(get_size(fn))
                             continue
-                        fsize = os.path.getsize(fn)
+                        fsize = get_size(fn)
                         if fn in DISTANTFILES and DISTANTFILES[fn][1] >= mtime and DISTANTFILES[fn][2] == fsize:
                             tqdm.tqdm.write('Already on distant: unmodified (mtime + fsize). Skipping: %s' % fn)
                             REQUIREDCHUNKS.add(DISTANTFILES[fn][0])
