@@ -223,11 +223,11 @@ def backup(src=None, dest=None, sftppwd=None, encryptionpwd=None, exclusion_list
                                 pbar.update(get_size(fn))
                                 continue
                             if h in DISTANTHASHES:  # ex : chunk already there with same SHA256, but other filename  (case 1 : duplicate file, case 2 : renamed/moved file)
-                                tqdm.tqdm.write('New, but already on distant (same sha256). Skipping: %s' % fn)
+                                tqdm.tqdm.write('Already on distant (same sha256). Skipping: %s' % fn)
                                 chunkid = DISTANTHASHES[h]
                                 REQUIREDCHUNKS.add(chunkid) 
                             else:
-                                tqdm.tqdm.write('New, sending file: %s' % fn)
+                                tqdm.tqdm.write('Uploading file: %s' % fn)
                                 chunkid = uuid.uuid4().bytes
                                 with sftp.open(chunkid.hex() + '.tmp', 'wb') as f_enc, open(fn, 'rb') as f:
                                     encrypt(f, key=key, salt=salt, out=f_enc)
