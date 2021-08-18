@@ -291,14 +291,14 @@ def restore(src=None, dest=None, sftppwd=None, encryptionpwd=None):
                 DISTANTFILES[fn] = [chunkid, mtime, fsize, h]
                 if DISTANTFILES[fn][0] == NULL16BYTES:  # deleted
                     del DISTANTFILES[fn]
-        for fn, [chunkid, mtime, fsize, h] in DISTANTFILES.items():
+        for fn, [chunkid, mtime, fsize, h] in tqdm(DISTANTFILES.items()):
             f2 = os.path.join(dest, fn).replace('\\', '/')
             os.makedirs(os.path.dirname(f2), exist_ok=True)
             if os.path.exists(f2) and getsha256(f2) == h:
-                print('Already present (same sha256). Skipping: %s' % fn)
+                tqdm.write('Already present (same sha256). Skipping: %s' % fn)
                 continue
             else:
-                print('Restoring %s' % fn)
+                tqdm.write('Restoring %s' % fn)
             with open(f2, 'wb') as f, src_cm.open(chunkid.hex(), 'rb') as g:
                 decrypt(g, pwd=encryptionpwd, out=f)
             os.utime(f2, ns=(os.stat(f2).st_atime_ns, mtime))
