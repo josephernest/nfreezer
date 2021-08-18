@@ -186,15 +186,19 @@ def backup(src=None, dest=None, sftppwd=None, encryptionpwd=None, exclusion_list
             ####### SEND FILES
             REQUIREDCHUNKS = set()
             with sftp.open('.files', 'a+') as flist:
-                local_file_list = glob.glob('**/*', recursive=True)
-                local_file_list = sorted(local_file_list, key=get_size, reverse=larger_files_first)
-                print("\n\nThe following files will be ignored because they match the exclusion list:")
-                for item in exclusion_list:
-                    for fn in local_file_list:
+                temp_file_list = sorted(set(glob.glob('**', recursive=True)),
+                                        key=get_size,
+                                        reverse=larger_files_first)
+                local_file_list = []
+                for fn in temp_file_list:
+                    cnt = 0
+                    for item in exclusion_list:
                         if item in fn:
-                            print(item + ": " + fn)
-                            local_file_list.remove(fn)
-                print("\n\n")
+                            cnt += 1
+                    if cnt != 0:
+                        print('Exclusion rule match "' + item + '": ' + fn)
+                    else:
+                        local_file_list.append(fn)
                 total_size = sum([get_size(x) for x in local_file_list])
                 with tqdm.tqdm(total=total_size, unit_scale=True, unit_divisor=1024, dynamic_ncols=True, unit="B", mininterval=1, desc="nFreezer") as pbar:
                     for fn in local_file_list:
