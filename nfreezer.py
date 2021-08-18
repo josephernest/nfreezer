@@ -28,8 +28,8 @@ def nullcontext():  # from contextlib import nullcontext for Python 3.7+
     yield None
 
 def get_size(path):
-    try: return os.stat(path).st_size
-    except: return 0
+    try: return os.path.getsize(path)
+    except FileNotFoundError: return 4096
 
 def getsha256(f):
     sha256 = hashlib.sha256()
