@@ -49,7 +49,7 @@ def KDF(pwd, salt=None):
     key = Crypto.Protocol.KDF.PBKDF2(pwd, salt, count=100*1000)
     return key, salt
 
-def encrypt(f=None, s=None, key=None, salt=None, out=None):
+def encrypt(f=None, s=None, key=None, salt=None, out=None, bar=None):
     if out is None:
         out = io.BytesIO()
     if f is None:
@@ -61,6 +61,7 @@ def encrypt(f=None, s=None, key=None, salt=None, out=None):
     cipher = Crypto.Cipher.AES.new(key, Crypto.Cipher.AES.MODE_GCM, nonce=nonce)
     while True:
         block = f.read(BLOCKSIZE)
+        bar.update(BLOCKSIZE)
         if not block:
             break
         out.write(cipher.encrypt(block))
@@ -230,12 +231,11 @@ def backup(src=None, dest=None, sftppwd=None, encryptionpwd=None, exclusion_list
                                 tqdm.tqdm.write('Uploading file: %s' % fn)
                                 chunkid = uuid.uuid4().bytes
                                 with sftp.open(chunkid.hex() + '.tmp', 'wb') as f_enc, open(fn, 'rb') as f:
-                                    encrypt(f, key=key, salt=salt, out=f_enc)
+                                    encrypt(f, key=key, salt=salt, out=f_enc, bar = pbar)
                                 sftp.rename(chunkid.hex() + '.tmp', chunkid.hex())
                                 REQUIREDCHUNKS.add(chunkid)
                                 DISTANTHASHES[h] = chunkid
                             flist.write(newdistantfileblock(chunkid=chunkid, mtime=mtime, fsize=fsize, h=h, fn=fn, key=key, salt=salt))         # todo: accumulate in a buffer and do this every 10 seconds instead
-                        pbar.update(get_size(fn))
                 pbar.close()
             delchunks = DISTANTCHUNKS - REQUIREDCHUNKS
             if len(delchunks) > 0:
