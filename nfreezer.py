@@ -49,7 +49,7 @@ def KDF(pwd, salt=None):
     key = Crypto.Protocol.KDF.PBKDF2(pwd, salt, count=100*1000)
     return key, salt
 
-def encrypt(f=None, s=None, key=None, salt=None, out=None, bar=None):
+def encrypt(f=None, s=None, key=None, salt=None, out=None):
     if out is None:
         out = io.BytesIO()
     if f is None:
@@ -61,7 +61,6 @@ def encrypt(f=None, s=None, key=None, salt=None, out=None, bar=None):
     cipher = Crypto.Cipher.AES.new(key, Crypto.Cipher.AES.MODE_GCM, nonce=nonce)
     while True:
         block = f.read(BLOCKSIZE)
-        bar.update(BLOCKSIZE)
         if not block:
             break
         out.write(cipher.encrypt(block))
@@ -231,7 +230,8 @@ def backup(src=None, dest=None, sftppwd=None, encryptionpwd=None, exclusion_list
                                 tqdm.tqdm.write('Uploading file: %s' % fn)
                                 chunkid = uuid.uuid4().bytes
                                 with sftp.open(chunkid.hex() + '.tmp', 'wb') as f_enc, open(fn, 'rb') as f:
-                                    encrypt(f, key=key, salt=salt, out=f_enc, bar = pbar)
+                                    encrypt(f, key=key, salt=salt, out=f_enc)
+                                pbar.update(get_size(fn))
                                 sftp.rename(chunkid.hex() + '.tmp', chunkid.hex())
                                 REQUIREDCHUNKS.add(chunkid)
                                 DISTANTHASHES[h] = chunkid
