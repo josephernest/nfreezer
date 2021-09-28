@@ -50,7 +50,7 @@ def KDF(pwd, salt=None):
     key = Crypto.Protocol.KDF.PBKDF2(pwd, salt, count=100*1000)
     return key, salt
 
-def encrypt(f=None, s=None, key=None, salt=None, out=None):
+def encrypt(f=None, s=None, key=None, salt=None, out=None, pbar=None):
     if out is None:
         out = io.BytesIO()
     if f is None:
@@ -65,6 +65,8 @@ def encrypt(f=None, s=None, key=None, salt=None, out=None):
         if not block:
             break
         out.write(cipher.encrypt(block))
+        if pbar is not None:
+            pbar.update(BLOCKSIZE)
     out.seek(32)
     out.write(cipher.digest())  # tag
     out.seek(0)
