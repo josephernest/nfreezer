@@ -205,7 +205,7 @@ def backup(src=None, dest=None, sftppwd=None, encryptionpwd=None, exclusion_list
                     else:
                         local_file_list.append(fn)
                 total_size = sum([get_size(x) for x in local_file_list])
-                with tqdm.tqdm(total=total_size, unit_scale=True, unit_divisor=1024, dynamic_ncols=True, smoothing=0.8, unit="B", mininterval=1, desc="nFreezer") as pbar:
+                with tqdm.tqdm(total=total_size, unit_scale=True, unit_divisor=1024, dynamic_ncols=True, smoothing=0.1, unit="B", mininterval=1, desc="nFreezer") as pbar:
                     threads = []
                     lock = threading.Lock()
                     def _upload_large_file_thread(lock, fn, pbar, sftp, chunkid, flist,
