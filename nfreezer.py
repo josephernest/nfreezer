@@ -17,11 +17,12 @@ Copyright (c) 2020, Joseph Ernest. See also LICENSE file.
 ==CHANGELOG==
 """
 
-import pysftp, getpass, paramiko, glob, os, hashlib, io, Crypto.Random, Crypto.Protocol.KDF, Crypto.Cipher.AES, uuid, zlib, time, pprint, sys, contextlib, tqdm
+import pysftp, getpass, paramiko, glob, os, hashlib, io, Crypto.Random, Crypto.Protocol.KDF, Crypto.Cipher.AES, uuid, zlib, time, pprint, sys, contextlib, tqdm, threading
 
 NULL16BYTES, NULL32BYTES = b'\x00' * 16, b'\x00' * 32
 BLOCKSIZE = 16*1024*1024  # 16 MB
 larger_files_first = True
+MAX_THREADS = 5
 
 @contextlib.contextmanager  
 def nullcontext():  # from contextlib import nullcontext for Python 3.7+
@@ -203,6 +204,25 @@ def backup(src=None, dest=None, sftppwd=None, encryptionpwd=None, exclusion_list
                         local_file_list.append(fn)
                 total_size = sum([get_size(x) for x in local_file_list])
                 with tqdm.tqdm(total=total_size, unit_scale=True, unit_divisor=1024, dynamic_ncols=True, unit="B", mininterval=1, desc="nFreezer") as pbar:
+                    threads = []
+                    lock = threading.Lock()
+                    def _upload_large_file_thread(lock, fn, pbar, sftp, chunkid, flist,
+                            REQUIREDCHUNKS, DISTANTHASHES):
+                        """
+                        if file is large, then creating a new thread with a new sftp connection
+                        to send it
+                        """
+                        with pysftp.Connection(host,
+                                    username=user,
+                                    password=sftppwd,
+                                    **extra_arg) as sftp_large_file:
+                            with sftp_large_file.open(chunkid.hex() + '.tmp', 'wb') as f_enc, open(fn, 'rb') as f:
+                                encrypt(f, key=key, salt=salt, out=f_enc, pbar=pbar)
+                                sftp_large_file.rename(chunkid.hex() + '.tmp', chunkid.hex())
+                        with lock:
+                            REQUIREDCHUNKS.add(chunkid)
+                            DISTANTHASHES[h] = chunkid
+                            flist.write(newdistantfileblock(chunkid=chunkid, mtime=mtime, fsize=fsize, h=h, fn=fn, key=key, salt=salt))         # todo: accumulate in a buffer and do this every 10 seconds instead
                     for fn in local_file_list:
                         fsize = get_size(fn)
                         if os.path.isdir(fn):
@@ -230,16 +250,29 @@ def backup(src=None, dest=None, sftppwd=None, encryptionpwd=None, exclusion_list
                                 chunkid = DISTANTHASHES[h]
                                 REQUIREDCHUNKS.add(chunkid) 
                                 pbar.update(fsize)
+                                flist.write(newdistantfileblock(chunkid=chunkid, mtime=mtime, fsize=fsize, h=h, fn=fn, key=key, salt=salt))
+                                 # todo: accumulate in a buffer and do this every 10 seconds instead
                             else:
                                 tqdm.tqdm.write('Uploading file: %s' % fn)
                                 chunkid = uuid.uuid4().bytes
-                                with sftp.open(chunkid.hex() + '.tmp', 'wb') as f_enc, open(fn, 'rb') as f:
-                                    encrypt(f, key=key, salt=salt, out=f_enc)
-                                pbar.update(get_size(fn))
-                                sftp.rename(chunkid.hex() + '.tmp', chunkid.hex())
-                                REQUIREDCHUNKS.add(chunkid)
-                                DISTANTHASHES[h] = chunkid
-                            flist.write(newdistantfileblock(chunkid=chunkid, mtime=mtime, fsize=fsize, h=h, fn=fn, key=key, salt=salt))         # todo: accumulate in a buffer and do this every 10 seconds instead
+                                if fsize <= 1048576:  # 1024*1024 is 1 Mb
+                                    with sftp.open(chunkid.hex() + '.tmp', 'wb') as f_enc, open(fn, 'rb') as f:
+                                        encrypt(f, key=key, salt=salt, out=f_enc, pbar=pbar)
+                                        sftp.rename(chunkid.hex() + '.tmp', chunkid.hex())
+                                    REQUIREDCHUNKS.add(chunkid)
+                                    DISTANTHASHES[h] = chunkid
+                                    flist.write(newdistantfileblock(chunkid=chunkid, mtime=mtime, fsize=fsize, h=h, fn=fn, key=key, salt=salt))
+                                    # todo: accumulate in a buffer and do this every 10 seconds instead
+                                else:
+                                    thread = threading.Thread(target=_upload_large_file_thread,
+                                                              args=(lock, fn, pbar, sftp, chunkid, flist,
+                                                                  REQUIREDCHUNKS, DISTANTHASHES),
+                                                              daemon=False)
+                                    thread.start()
+                                    threads.append(thread)
+                                    while sum([t.is_alive() for t in threads]) >= MAX_THREADS:
+                                        time.sleep(0.5)
+                [t.join() for t in threads]
                 pbar.close()
             delchunks = DISTANTCHUNKS - REQUIREDCHUNKS
             if len(delchunks) > 0:
