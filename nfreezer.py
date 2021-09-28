@@ -204,30 +204,32 @@ def backup(src=None, dest=None, sftppwd=None, encryptionpwd=None, exclusion_list
                 total_size = sum([get_size(x) for x in local_file_list])
                 with tqdm.tqdm(total=total_size, unit_scale=True, unit_divisor=1024, dynamic_ncols=True, unit="B", mininterval=1, desc="nFreezer") as pbar:
                     for fn in local_file_list:
+                        fsize = get_size(fn)
                         if os.path.isdir(fn):
-                            pbar.update(get_size(fn))
+                            pbar.update(fsize)
                             continue
                         try:
                             mtime = os.stat(fn).st_mtime_ns
                         except FileNotFoundError:
                             tqdm.tqdm.write("Not found error, skipped file %s" % fn)
-                            pbar.update(get_size(fn))
+                            pbar.update(fsize)
                             continue
-                        fsize = get_size(fn)
                         if fn in DISTANTFILES and DISTANTFILES[fn][1] >= mtime and DISTANTFILES[fn][2] == fsize:
                             tqdm.tqdm.write('Already on distant: unmodified (mtime + fsize). Skipping: %s' % fn)
+                            pbar.update(fsize)
                             REQUIREDCHUNKS.add(DISTANTFILES[fn][0])
                         else:
                             try:
                                 h = getsha256(fn)
                             except OSError as e:
                                 tqdm.tqdm.write(f"Skipping file, might be a UNIX special file: {e}, {fn}")
-                                pbar.update(get_size(fn))
+                                pbar.update(fsize)
                                 continue
                             if h in DISTANTHASHES:  # ex : chunk already there with same SHA256, but other filename  (case 1 : duplicate file, case 2 : renamed/moved file)
                                 tqdm.tqdm.write('Already on distant (same sha256). Skipping: %s' % fn)
                                 chunkid = DISTANTHASHES[h]
                                 REQUIREDCHUNKS.add(chunkid) 
+                                pbar.update(fsize)
                             else:
                                 tqdm.tqdm.write('Uploading file: %s' % fn)
                                 chunkid = uuid.uuid4().bytes
