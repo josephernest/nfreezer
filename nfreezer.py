@@ -21,7 +21,7 @@ import pysftp, getpass, paramiko, glob, os, hashlib, io, Crypto.Random, Crypto.P
 
 NULL16BYTES, NULL32BYTES = b'\x00' * 16, b'\x00' * 32
 BLOCKSIZE = 16*1024*1024  # 16 MB
-larger_files_first = True
+larger_files_first = False
 MAX_THREADS = 5
 
 @contextlib.contextmanager  
