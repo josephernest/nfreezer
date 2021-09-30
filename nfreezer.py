@@ -132,9 +132,9 @@ def backup(src=None, dest=None, sftppwd=None, encryptionpwd=None, exclusion_list
     if not remote or not user or not host or not remotepath:  # either not remote (local), or remote with empty user, host or remotepath
         print('dest should use the following format: user@192.168.0.2:/path/to/backup/')
         return
-    print('Starting backup...\nSource path: %s\nDestination host: %s\nDestination path: %s' % (src, host, remotepath))
+    print(f'Starting backup...\nSource path: {src}\nDestination host: {host}\nDestination path: {remotepath}')
     if sftppwd is None:
-        sftppwd = getpass.getpass('Please enter the SFTP password for user %s: ' % user)
+        sftppwd = getpass.getpass(f'Please enter the SFTP password for user {user}: ')
     if encryptionpwd is None:
         while True:
             encryptionpwd = getpass.getpass('Please enter the encryption password: ')
@@ -182,7 +182,7 @@ def backup(src=None, dest=None, sftppwd=None, encryptionpwd=None, exclusion_list
                         DISTANTHASHES[h] = chunkid      # DISTANTHASHES[sha256_noencryption] = chunkid ; even if deleted file keep the sha256, it might be useful for moved/renamed files
             for fn, distantfile in DISTANTFILES.items():
                 if not os.path.exists(fn):
-                    print('  %s no longer exists (deleted or moved/renamed).' % fn)
+                    print(f'  {fn} no longer exists (deleted or moved/renamed).')
                     DELS += newdistantfileblock(chunkid=NULL16BYTES, mtime=0, fsize=0, h=NULL32BYTES, fn=fn, key=key, salt=salt)
             if len(DELS) > 0:
                 with sftp.open('.files', 'a+') as flist:
@@ -233,29 +233,29 @@ def backup(src=None, dest=None, sftppwd=None, encryptionpwd=None, exclusion_list
                         try:
                             mtime = os.stat(fn).st_mtime_ns
                         except FileNotFoundError:
-                            tqdm.tqdm.write("Not found error, skipped file %s" % fn)
+                            tqdm.tqdm.write(f"Not found, skipping: {fn}")
                             pbar.update(fsize)
                             continue
                         if fn in DISTANTFILES and DISTANTFILES[fn][1] >= mtime and DISTANTFILES[fn][2] == fsize:
-                            tqdm.tqdm.write('Already on distant: unmodified (mtime + fsize). Skipping: %s' % fn)
+                            tqdm.tqdm.write(f'Unmodified, skipping: {fn}')
                             pbar.update(fsize)
                             REQUIREDCHUNKS.add(DISTANTFILES[fn][0])
                         else:
                             try:
                                 h = getsha256(fn)
                             except OSError as e:
-                                tqdm.tqdm.write(f"Skipping file, might be a UNIX special file: {e}, {fn}")
+                                tqdm.tqdm.write(f"UNIX special file? Skipping: {fn}")
                                 pbar.update(fsize)
                                 continue
                             if h in DISTANTHASHES:  # ex : chunk already there with same SHA256, but other filename  (case 1 : duplicate file, case 2 : renamed/moved file)
-                                tqdm.tqdm.write('Already on distant (same sha256). Skipping: %s' % fn)
+                                tqdm.tqdm.write(f'Same hash, skipping: {fn}')
                                 chunkid = DISTANTHASHES[h]
                                 REQUIREDCHUNKS.add(chunkid) 
                                 pbar.update(fsize)
                                 flist.write(newdistantfileblock(chunkid=chunkid, mtime=mtime, fsize=fsize, h=h, fn=fn, key=key, salt=salt))
                                  # todo: accumulate in a buffer and do this every 10 seconds instead
                             else:
-                                tqdm.tqdm.write('Uploading file: %s' % fn)
+                                tqdm.tqdm.write(f'Uploading: {fn}')
                                 chunkid = uuid.uuid4().bytes
                                 if fsize <= 1048576:  # 1024*1024 is 1 Mb
                                     with sftp.open(chunkid.hex() + '.tmp', 'wb') as f_enc, open(fn, 'rb') as f:
@@ -278,7 +278,7 @@ def backup(src=None, dest=None, sftppwd=None, encryptionpwd=None, exclusion_list
                 pbar.close()
             delchunks = DISTANTCHUNKS - REQUIREDCHUNKS
             if len(delchunks) > 0:
-                print('Deleting %s no-longer-used distant chunks... ' % len(delchunks), end='')
+                print(f'Deleting {len(delchunks)} no-longer-used distant chunks... ', end='')
                 for chunkid in delchunks:
                     sftp.remove(chunkid.hex())
                 print('done.')
@@ -301,7 +301,7 @@ def restore(src=None, dest=None, sftppwd=None, encryptionpwd=None):
     remote, user, host, path = parseaddress(src)
     if remote:
         if sftppwd is None:
-            sftppwd = getpass.getpass('Please enter the SFTP password for user %s: ' % user)
+            sftppwd = getpass.getpass(f'Please enter the SFTP password for user {user}: ')
         if not user or not host or not path:
             print('src should be either a local directory, or a remote using the following format: user@192.168.0.2:/path/to/backup/')
             return
@@ -336,10 +336,10 @@ def restore(src=None, dest=None, sftppwd=None, encryptionpwd=None):
             f2 = os.path.join(dest, fn).replace('\\', '/')
             os.makedirs(os.path.dirname(f2), exist_ok=True)
             if os.path.exists(f2) and getsha256(f2) == h:
-                tqdm.write('Already present (same sha256). Skipping: %s' % fn)
+                tqdm.write(f'Already present (same sha256). Skipping: {fn}')
                 continue
             else:
-                tqdm.write('Restoring %s' % fn)
+                tqdm.write(f'Restoring {fn}')
             with open(f2, 'wb') as f, src_cm.open(chunkid.hex(), 'rb') as g:
                 decrypt(g, pwd=encryptionpwd, out=f)
             os.utime(f2, ns=(os.stat(f2).st_atime_ns, mtime))
