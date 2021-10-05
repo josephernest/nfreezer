@@ -17,7 +17,8 @@ Copyright (c) 2020, Joseph Ernest. See also LICENSE file.
 ==CHANGELOG==
 """
 
-import pysftp, getpass, paramiko, glob, os, hashlib, io, Crypto.Random, Crypto.Protocol.KDF, Crypto.Cipher.AES, uuid, zlib, time, pprint, sys, contextlib, tqdm, threading
+import pysftp, getpass, paramiko, glob, os, hashlib, io, Crypto.Random, Crypto.Protocol.KDF, Crypto.Cipher.AES, uuid, zlib, time, pprint, sys, contextlib, threading, re
+from tqdm import tqdm
 
 NULL16BYTES, NULL32BYTES = b'\x00' * 16, b'\x00' * 32
 BLOCKSIZE = 16*1024*1024  # 16 MB
