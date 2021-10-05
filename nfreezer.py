@@ -297,8 +297,8 @@ def restore(src=None, dest=None, sftppwd=None, encryptionpwd=None):
     """Restore encrypted files from `src` (SFTP or local path) to `dest` (local path)."""
     if encryptionpwd is None:
         while True:
-            encryptionpwd = getpass.getpass('Please enter the encryption password: ')
-            encryptionpwd_check = getpass.getpass('Confirm encryption password: ')
+            encryptionpwd = getpass.getpass('Please enter the decryption password: ')
+            encryptionpwd_check = getpass.getpass('Confirm decryption password: ')
             if encryptionpwd != encryptionpwd_check:
                 print("Passwords are not identical!\n")
             else:
