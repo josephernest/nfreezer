@@ -301,7 +301,6 @@ def restore(src=None, dest=None,
         only_print_file_list=False,
         include_regex=".*",
         exclude_regex='^/',
-        ignore_corruption_check=False):
     """Restore encrypted files from `src` (SFTP or local path) to `dest` (local path)."""
     if encryptionpwd is None:
         while True:
