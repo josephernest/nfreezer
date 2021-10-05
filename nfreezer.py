@@ -365,6 +365,10 @@ def restore(src=None, dest=None,
                         tqdm.write(str(f"{fn}: {DISTANTFILES[fn]}"))
                     elif verbose_file_list is True:
                         tqdm.write(fn)
+        if only_print_file_list is True:
+            print("Done.")
+            raise SystemExit()
+
         for fn, [chunkid, mtime, fsize, h] in tqdm(
                 DISTANTFILES.items(),
                 smoothing=0.1,
