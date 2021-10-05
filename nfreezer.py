@@ -144,149 +144,154 @@ def backup(src=None, dest=None, sftppwd=None, encryptionpwd=None, exclusion_list
             else:
                 break
     key, salt = KDF(encryptionpwd)        
-    try:
-        with pysftp.Connection(host, username=user, password=sftppwd, **extra_arg) as sftp:
-            if sftp.isdir(remotepath):
-                sftp.chdir(remotepath)
-            else:    
-                print('Destination directory does not exist.')
-                return
-            ######## GET DISTANT FILES INFO
-            print('Distant files list: getting...')
-            DELS = b''
-            DISTANTFILES = dict()
-            DISTANTHASHES = dict()
-            distantfilenames = set(sftp.listdir())
-            DISTANTCHUNKS = {bytes.fromhex(f) for f in distantfilenames if '.' not in f}  # discard .files and .tmp files
-            for f in distantfilenames:    # remove old distant temp files
-                if f.endswith('.tmp'):
-                    sftp.remove(f)
-            flist = io.BytesIO()
-            if sftp.isfile('.files'):
-                sftp.getfo('.files', flist)
-                flist.seek(0)
-                while True:
-                    l = flist.read(4)
-                    if not l:
-                        break
-                    length = int.from_bytes(l, byteorder='little')
-                    s = flist.read(length)
-                    if len(s) != length:
-                        print('Item of .files is corrupt. Last sync interrupted?')
-                        break                    
-                    chunkid, mtime, fsize, h, fn = readdistantfileblock(s, encryptionpwd)
-                    DISTANTFILES[fn] = [chunkid, mtime, fsize, h]
-                    if DISTANTFILES[fn][0] == NULL16BYTES:  # deleted
-                        del DISTANTFILES[fn]
-                    if chunkid in DISTANTCHUNKS:
-                        DISTANTHASHES[h] = chunkid      # DISTANTHASHES[sha256_noencryption] = chunkid ; even if deleted file keep the sha256, it might be useful for moved/renamed files
-            for fn, distantfile in DISTANTFILES.items():
-                if not os.path.exists(fn):
-                    print(f'  {fn} no longer exists (deleted or moved/renamed).')
-                    DELS += newdistantfileblock(chunkid=NULL16BYTES, mtime=0, fsize=0, h=NULL32BYTES, fn=fn, key=key, salt=salt)
-            if len(DELS) > 0:
+    for counter in range(5):
+        try:
+            with pysftp.Connection(host, username=user, password=sftppwd, **extra_arg) as sftp:
+                if sftp.isdir(remotepath):
+                    sftp.chdir(remotepath)
+                else:    
+                    print('Destination directory does not exist.')
+                    return
+                ######## GET DISTANT FILES INFO
+                print('Distant files list: getting...')
+                DELS = b''
+                DISTANTFILES = dict()
+                DISTANTHASHES = dict()
+                distantfilenames = set(sftp.listdir())
+                DISTANTCHUNKS = {bytes.fromhex(f) for f in distantfilenames if '.' not in f}  # discard .files and .tmp files
+                for f in distantfilenames:    # remove old distant temp files
+                    if f.endswith('.tmp'):
+                        sftp.remove(f)
+                flist = io.BytesIO()
+                if sftp.isfile('.files'):
+                    sftp.getfo('.files', flist)
+                    flist.seek(0)
+                    while True:
+                        l = flist.read(4)
+                        if not l:
+                            break
+                        length = int.from_bytes(l, byteorder='little')
+                        s = flist.read(length)
+                        if len(s) != length:
+                            print('Item of .files is corrupt. Last sync interrupted?')
+                            break                    
+                        chunkid, mtime, fsize, h, fn = readdistantfileblock(s, encryptionpwd)
+                        DISTANTFILES[fn] = [chunkid, mtime, fsize, h]
+                        if DISTANTFILES[fn][0] == NULL16BYTES:  # deleted
+                            del DISTANTFILES[fn]
+                        if chunkid in DISTANTCHUNKS:
+                            DISTANTHASHES[h] = chunkid      # DISTANTHASHES[sha256_noencryption] = chunkid ; even if deleted file keep the sha256, it might be useful for moved/renamed files
+                for fn, distantfile in DISTANTFILES.items():
+                    if not os.path.exists(fn):
+                        print(f'  {fn} no longer exists (deleted or moved/renamed).')
+                        DELS += newdistantfileblock(chunkid=NULL16BYTES, mtime=0, fsize=0, h=NULL32BYTES, fn=fn, key=key, salt=salt)
+                if len(DELS) > 0:
+                    with sftp.open('.files', 'a+') as flist:
+                        flist.write(DELS)
+                print('Distant files list: done.')
+                ####### SEND FILES
+                REQUIREDCHUNKS = set()
                 with sftp.open('.files', 'a+') as flist:
-                    flist.write(DELS)
-            print('Distant files list: done.')
-            ####### SEND FILES
-            REQUIREDCHUNKS = set()
-            with sftp.open('.files', 'a+') as flist:
-                temp_file_list = sorted(set(glob.glob('**', recursive=True)),
-                                        key=get_size,
-                                        reverse=larger_files_first)
-                local_file_list = []
-                for fn in temp_file_list:
-                    cnt = 0
-                    for item in exclusion_list:
-                        if item in fn:
-                            cnt += 1
-                    if cnt != 0:
-                        print('Exclusion rule match "' + item + '": ' + fn)
-                    else:
-                        local_file_list.append(fn)
-                total_size = sum([get_size(x) for x in local_file_list])
-                with tqdm.tqdm(total=total_size, unit_scale=True, unit_divisor=1024, dynamic_ncols=True, smoothing=0.1, unit="B", mininterval=1, desc="nFreezer") as pbar:
-                    threads = []
-                    lock = threading.Lock()
-                    def _upload_large_file_thread(lock, fn, pbar, sftp, chunkid, flist,
-                            REQUIREDCHUNKS, DISTANTHASHES):
-                        """
-                        if file is large, then creating a new thread with a new sftp connection
-                        to send it
-                        """
-                        with pysftp.Connection(host,
-                                    username=user,
-                                    password=sftppwd,
-                                    **extra_arg) as sftp_large_file:
-                            with sftp_large_file.open(chunkid.hex() + '.tmp', 'wb') as f_enc, open(fn, 'rb') as f:
-                                encrypt(f, key=key, salt=salt, out=f_enc, pbar=pbar)
-                                sftp_large_file.rename(chunkid.hex() + '.tmp', chunkid.hex())
-                        with lock:
-                            REQUIREDCHUNKS.add(chunkid)
-                            DISTANTHASHES[h] = chunkid
-                            flist.write(newdistantfileblock(chunkid=chunkid, mtime=mtime, fsize=fsize, h=h, fn=fn, key=key, salt=salt))         # todo: accumulate in a buffer and do this every 10 seconds instead
-                    for fn in local_file_list:
-                        fsize = get_size(fn)
-                        if os.path.isdir(fn):
-                            pbar.update(fsize)
-                            continue
-                        try:
-                            mtime = os.stat(fn).st_mtime_ns
-                        except FileNotFoundError:
-                            tqdm.tqdm.write(f"Not found, skipping: {fn}")
-                            pbar.update(fsize)
-                            continue
-                        if fn in DISTANTFILES and DISTANTFILES[fn][1] >= mtime and DISTANTFILES[fn][2] == fsize:
-                            tqdm.tqdm.write(f'Unmodified, skipping: {fn}')
-                            pbar.update(fsize)
-                            REQUIREDCHUNKS.add(DISTANTFILES[fn][0])
+                    temp_file_list = sorted(set(glob.glob('**', recursive=True)),
+                                            key=get_size,
+                                            reverse=larger_files_first)
+                    local_file_list = []
+                    for fn in temp_file_list:
+                        cnt = 0
+                        for item in exclusion_list:
+                            if item in fn:
+                                cnt += 1
+                        if cnt != 0:
+                            print('Exclusion rule match "' + item + '": ' + fn)
                         else:
-                            try:
-                                h = getsha256(fn)
-                            except OSError as e:
-                                tqdm.tqdm.write(f"UNIX special file? Skipping: {fn}")
+                            local_file_list.append(fn)
+                    total_size = sum([get_size(x) for x in local_file_list])
+                    with tqdm(total=total_size, unit_scale=True, unit_divisor=1024, dynamic_ncols=True, smoothing=0.1, unit="B", mininterval=1, desc="nFreezer") as pbar:
+                        threads = []
+                        lock = threading.Lock()
+                        def _upload_large_file_thread(lock, fn, pbar, sftp, chunkid, flist,
+                                REQUIREDCHUNKS, DISTANTHASHES):
+                            """
+                            if file is large, then creating a new thread with a new sftp connection
+                            to send it
+                            """
+                            with pysftp.Connection(host,
+                                        username=user,
+                                        password=sftppwd,
+                                        **extra_arg) as sftp_large_file:
+                                with sftp_large_file.open(chunkid.hex() + '.tmp', 'wb') as f_enc, open(fn, 'rb') as f:
+                                    encrypt(f, key=key, salt=salt, out=f_enc, pbar=pbar)
+                                    sftp_large_file.rename(chunkid.hex() + '.tmp', chunkid.hex())
+                            with lock:
+                                REQUIREDCHUNKS.add(chunkid)
+                                DISTANTHASHES[h] = chunkid
+                                flist.write(newdistantfileblock(chunkid=chunkid, mtime=mtime, fsize=fsize, h=h, fn=fn, key=key, salt=salt))         # todo: accumulate in a buffer and do this every 10 seconds instead
+                        for fn in local_file_list:
+                            fsize = get_size(fn)
+                            if os.path.isdir(fn):
                                 pbar.update(fsize)
                                 continue
-                            if h in DISTANTHASHES:  # ex : chunk already there with same SHA256, but other filename  (case 1 : duplicate file, case 2 : renamed/moved file)
-                                tqdm.tqdm.write(f'Same hash, skipping: {fn}')
-                                chunkid = DISTANTHASHES[h]
-                                REQUIREDCHUNKS.add(chunkid) 
+                            try:
+                                mtime = os.stat(fn).st_mtime_ns
+                            except FileNotFoundError:
+                                tqdm.write(f"Not found, skipping: {fn}")
                                 pbar.update(fsize)
-                                flist.write(newdistantfileblock(chunkid=chunkid, mtime=mtime, fsize=fsize, h=h, fn=fn, key=key, salt=salt))
-                                 # todo: accumulate in a buffer and do this every 10 seconds instead
+                                continue
+                            if fn in DISTANTFILES and DISTANTFILES[fn][1] >= mtime and DISTANTFILES[fn][2] == fsize:
+                                tqdm.write(f'Unmodified, skipping: {fn}')
+                                pbar.update(fsize)
+                                REQUIREDCHUNKS.add(DISTANTFILES[fn][0])
                             else:
-                                tqdm.tqdm.write(f'Uploading: {fn}')
-                                chunkid = uuid.uuid4().bytes
-                                if fsize <= 1048576:  # 1024*1024 is 1 Mb
-                                    with sftp.open(chunkid.hex() + '.tmp', 'wb') as f_enc, open(fn, 'rb') as f:
-                                        encrypt(f, key=key, salt=salt, out=f_enc, pbar=pbar)
-                                        sftp.rename(chunkid.hex() + '.tmp', chunkid.hex())
-                                    REQUIREDCHUNKS.add(chunkid)
-                                    DISTANTHASHES[h] = chunkid
+                                try:
+                                    h = getsha256(fn)
+                                except OSError as e:
+                                    tqdm.write(f"UNIX special file? Skipping: {fn}")
+                                    pbar.update(fsize)
+                                    continue
+                                if h in DISTANTHASHES:  # ex : chunk already there with same SHA256, but other filename  (case 1 : duplicate file, case 2 : renamed/moved file)
+                                    tqdm.write(f'Same hash, skipping: {fn}')
+                                    chunkid = DISTANTHASHES[h]
+                                    REQUIREDCHUNKS.add(chunkid) 
+                                    pbar.update(fsize)
                                     flist.write(newdistantfileblock(chunkid=chunkid, mtime=mtime, fsize=fsize, h=h, fn=fn, key=key, salt=salt))
-                                    # todo: accumulate in a buffer and do this every 10 seconds instead
+                                     # todo: accumulate in a buffer and do this every 10 seconds instead
                                 else:
-                                    thread = threading.Thread(target=_upload_large_file_thread,
-                                                              args=(lock, fn, pbar, sftp, chunkid, flist,
-                                                                  REQUIREDCHUNKS, DISTANTHASHES),
-                                                              daemon=False)
-                                    thread.start()
-                                    threads.append(thread)
-                                    while sum([t.is_alive() for t in threads]) >= MAX_THREADS:
-                                        time.sleep(0.5)
-                [t.join() for t in threads]
-                pbar.close()
-            delchunks = DISTANTCHUNKS - REQUIREDCHUNKS
-            if len(delchunks) > 0:
-                print(f'Deleting {len(delchunks)} no-longer-used distant chunks... ', end='')
-                for chunkid in delchunks:
-                    sftp.remove(chunkid.hex())
-                print('done.')
-        print('Backup finished.')
-    except paramiko.ssh_exception.AuthenticationException:
-        print('Authentication failed.')
-    except paramiko.ssh_exception.SSHException as e:
-        print(e, '\nPlease ssh your remote host at least once before, or add your remote to your known_hosts file.\n\n')  # todo: avoid ugly error messages after
+                                    tqdm.write(f'Uploading: {fn}')
+                                    chunkid = uuid.uuid4().bytes
+                                    if fsize <= 1048576:  # 1024*1024 is 1 Mb
+                                        with sftp.open(chunkid.hex() + '.tmp', 'wb') as f_enc, open(fn, 'rb') as f:
+                                            encrypt(f, key=key, salt=salt, out=f_enc, pbar=pbar)
+                                            sftp.rename(chunkid.hex() + '.tmp', chunkid.hex())
+                                        REQUIREDCHUNKS.add(chunkid)
+                                        DISTANTHASHES[h] = chunkid
+                                        flist.write(newdistantfileblock(chunkid=chunkid, mtime=mtime, fsize=fsize, h=h, fn=fn, key=key, salt=salt))
+                                        # todo: accumulate in a buffer and do this every 10 seconds instead
+                                    else:
+                                        thread = threading.Thread(target=_upload_large_file_thread,
+                                                                  args=(lock, fn, pbar, sftp, chunkid, flist,
+                                                                      REQUIREDCHUNKS, DISTANTHASHES),
+                                                                  daemon=False)
+                                        thread.start()
+                                        threads.append(thread)
+                                        while sum([t.is_alive() for t in threads]) >= MAX_THREADS:
+                                            time.sleep(0.5)
+                    [t.join() for t in threads]
+                    pbar.close()
+                delchunks = DISTANTCHUNKS - REQUIREDCHUNKS
+                if len(delchunks) > 0:
+                    print(f'Deleting {len(delchunks)} no-longer-used distant chunks... ', end='')
+                    for chunkid in delchunks:
+                        sftp.remove(chunkid.hex())
+                    print('done.')
+            print('Backup finished.')
+            break
+        except paramiko.ssh_exception.AuthenticationException:
+            print('Authentication failed.')
+            continue
+        except paramiko.ssh_exception.SSHException as e:
+            print(e, '\nPlease ssh your remote host at least once before, or add your remote to your known_hosts file.\n\n')  # todo: avoid ugly error messages after
+            continue
+        break
 
 def restore(src=None, dest=None, sftppwd=None, encryptionpwd=None):
     """Restore encrypted files from `src` (SFTP or local path) to `dest` (local path)."""
