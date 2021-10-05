@@ -294,7 +294,14 @@ def backup(src=None, dest=None, sftppwd=None, encryptionpwd=None, exclusion_list
             continue
         break
 
-def restore(src=None, dest=None, sftppwd=None, encryptionpwd=None):
+def restore(src=None, dest=None,
+        sftppwd=None, encryptionpwd=None,
+        print_file_list=False,
+        verbose_file_list=True,
+        only_print_file_list=False,
+        include_regex=".*",
+        exclude_regex='^/',
+        ignore_corruption_check=False):
     """Restore encrypted files from `src` (SFTP or local path) to `dest` (local path)."""
     if encryptionpwd is None:
         while True:
@@ -324,13 +331,29 @@ def restore(src=None, dest=None, sftppwd=None, encryptionpwd=None):
             print('src path does not exist.')
             return
         print('Restoring backup from %s: %s\nDestination local path: %s' % ('remote' if remote else 'local path', src, dest))
+
         with src_cm.open('.files', 'rb') as flist:
+            start = time.time()
+            print("Fetching remote file list...", end="")
+            n = len(flist.read())
+            print(f" (~{int(time.time() - start)}s)")
+            flist.seek(0)
+
+            pbar = tqdm(total=n,
+                    unit="B",
+                    dynamic_ncols=True,
+                    unit_scale=True,
+                    unit_divisor=1024,
+                    smoothing=0.1,
+                    desc="Constructing file list")
             while True:
                 l = flist.read(4)
                 if not l:
                     break
                 length = int.from_bytes(l, byteorder='little')
                 s = flist.read(length)
+                pbar.update(length+4)
+
                 if len(s) != length:
                     print('An item of the remote file list (.files) is corrupt, ignored. Last sync interrupted?')
                     break
@@ -338,7 +361,23 @@ def restore(src=None, dest=None, sftppwd=None, encryptionpwd=None):
                 DISTANTFILES[fn] = [chunkid, mtime, fsize, h]
                 if DISTANTFILES[fn][0] == NULL16BYTES:  # deleted
                     del DISTANTFILES[fn]
-        for fn, [chunkid, mtime, fsize, h] in tqdm(DISTANTFILES.items()):
+                else:
+                    if only_print_file_list is True:
+                        tqdm.write(str(f"{fn}: {DISTANTFILES[fn]}"))
+                    elif verbose_file_list is True:
+                        tqdm.write(fn)
+        for fn, [chunkid, mtime, fsize, h] in tqdm(
+                DISTANTFILES.items(),
+                smoothing=0.1,
+                dynamic_ncols=True,
+                desc="Restoring files",
+                unit="file"):
+            if re.match(include_regex, fn) is None:
+                tqdm.write(f"Skipping file: doesn't match inclusion rule: {fn}")
+                break
+            if re.match(exclude_regex, fn) is not None:
+                tqdm.write(f"Skipping file: matches exclusion rule: {fn}")
+                break
             f2 = os.path.join(dest, fn).replace('\\', '/')
             os.makedirs(os.path.dirname(f2), exist_ok=True)
             if os.path.exists(f2) and getsha256(f2) == h:
