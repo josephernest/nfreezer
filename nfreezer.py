@@ -256,7 +256,7 @@ def backup(src=None, dest=None, sftppwd=None, encryptionpwd=None, exclusion_list
                                 else:
                                     tqdm.write(f'Uploading: {fn}')
                                     chunkid = uuid.uuid4().bytes
-                                    if fsize <= 1048576:  # 1024*1024 is 1 Mb
+                                    if fsize <= SMALL_FILE:
                                         with sftp.open(chunkid.hex() + '.tmp', 'wb') as f_enc, open(fn, 'rb') as f:
                                             encrypt(f, key=key, salt=salt, out=f_enc, pbar=pbar)
                                             sftp.rename(chunkid.hex() + '.tmp', chunkid.hex())
@@ -314,6 +314,7 @@ def restore(src=None, dest=None,
             print('src should be either a local directory, or a remote using the following format: user@192.168.0.2:/path/to/backup/')
             return
         src_cm = pysftp.Connection(host, username=user, password=sftppwd)
+
     else:
         src_cm = nullcontext()
         src_cm.open, src_cm.chdir, src_cm.isdir = open, os.chdir, os.path.isdir
