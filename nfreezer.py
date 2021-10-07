@@ -272,7 +272,7 @@ def backup(src=None, dest=None, sftppwd=None, encryptionpwd=None, exclusion_list
                                         threads.append(thread)
                                         while sum([t.is_alive() for t in threads]) >= MAX_THREADS:
                                             time.sleep(0.5)
-                    [t.join() for t in threads]
+                        [t.join() for t in threads]
                     pbar.close()
                 delchunks = DISTANTCHUNKS - REQUIREDCHUNKS
                 if len(delchunks) > 0:
