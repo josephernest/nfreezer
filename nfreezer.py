@@ -112,6 +112,50 @@ def parseaddress(addr):
             return True, user.strip(), host.strip(), path.strip()
     return False, None, None, addr       # not remote in all other cases
 
+
+def threaded_upload(lock, fn, pbar, chunkid, flist,
+        REQUIREDCHUNKS, DISTANTHASHES,
+        mtime, fsize, h, key, salt,
+        host, user, sftppwd, extra_arg, remotepath):
+    """
+    if file is large, then create a new thread with a new sftp connection
+    to send it
+    """
+    with pysftp.Connection(host,
+                           username=user,
+                           password=sftppwd,
+                           **extra_arg) as sftp:
+        if sftp.isdir(remotepath):
+            sftp.chdir(remotepath)
+            with sftp.open(chunkid.hex() + '.tmp', 'wb') as f_enc, open(fn, 'rb') as f:
+                encrypt(f, key=key, salt=salt, out=f_enc, pbar=pbar)
+                sftp.rename(chunkid.hex() + '.tmp', chunkid.hex())
+    with lock:
+        REQUIREDCHUNKS.add(chunkid)
+        DISTANTHASHES[h] = chunkid
+        flist.write(newdistantfileblock(chunkid=chunkid, mtime=mtime, fsize=fsize, h=h, fn=fn, key=key, salt=salt))
+
+
+def threaded_restore(f2, lock, pbar, chunkid, mtime, fn,
+        host, user, sftppwd, encryptionpwd, extra_arg, path, fsize):
+    """
+    create a new thread to download and decrypt a file when restoring
+    """
+    tqdm.write(f'Restoring {fn}')
+    with pysftp.Connection(host,
+                           username=user,
+                           password=sftppwd,
+                           **extra_arg) as sftp:
+        if sftp.isdir(path):
+            sftp.chdir(path)
+        with sftp.open(chunkid.hex(), 'rb') as g:
+            with open(f2, 'wb') as f:
+                decrypt(g, pwd=encryptionpwd, out=f)
+    with lock:
+        os.utime(f2, ns=(os.stat(f2).st_atime_ns, mtime))
+    pbar.update(fsize)
+
+
 def backup(src=None, dest=None, sftppwd=None, encryptionpwd=None, exclusion_list=None):
     """Do a backup of `src` (local path) to `dest` (SFTP). The files are encrypted locally and are *never* decrypted on `dest`. Also, `dest` never gets the `encryptionpwd`."""
     if os.path.isdir(src):
@@ -158,7 +202,8 @@ def backup(src=None, dest=None, sftppwd=None, encryptionpwd=None, exclusion_list
                 DISTANTHASHES = dict()
                 distantfilenames = set(sftp.listdir())
                 DISTANTCHUNKS = {bytes.fromhex(f) for f in distantfilenames if '.' not in f}  # discard .files and .tmp files
-                for f in distantfilenames:    # remove old distant temp files
+                print("Removing old .tmp files...")
+                for f in distantfilenames:
                     if f.endswith('.tmp'):
                         sftp.remove(f)
                 flist = io.BytesIO()
@@ -166,10 +211,10 @@ def backup(src=None, dest=None, sftppwd=None, encryptionpwd=None, exclusion_list
                     sftp.getfo('.files', flist)
                     flist.seek(0)
                     while True:
-                        l = flist.read(4)
-                        if not l:
+                        le = flist.read(4)
+                        if not le:
                             break
-                        length = int.from_bytes(l, byteorder='little')
+                        length = int.from_bytes(le, byteorder='little')
                         s = flist.read(length)
                         if len(s) != length:
                             print('Item of .files is corrupt. Last sync interrupted?')
@@ -208,23 +253,6 @@ def backup(src=None, dest=None, sftppwd=None, encryptionpwd=None, exclusion_list
                     with tqdm(total=total_size, unit_scale=True, unit_divisor=1024, dynamic_ncols=True, smoothing=0.1, unit="B", mininterval=1, desc="nFreezer") as pbar:
                         threads = []
                         lock = threading.Lock()
-                        def _upload_large_file_thread(lock, fn, pbar, sftp, chunkid, flist,
-                                REQUIREDCHUNKS, DISTANTHASHES):
-                            """
-                            if file is large, then creating a new thread with a new sftp connection
-                            to send it
-                            """
-                            with pysftp.Connection(host,
-                                        username=user,
-                                        password=sftppwd,
-                                        **extra_arg) as sftp_large_file:
-                                with sftp_large_file.open(chunkid.hex() + '.tmp', 'wb') as f_enc, open(fn, 'rb') as f:
-                                    encrypt(f, key=key, salt=salt, out=f_enc, pbar=pbar)
-                                    sftp_large_file.rename(chunkid.hex() + '.tmp', chunkid.hex())
-                            with lock:
-                                REQUIREDCHUNKS.add(chunkid)
-                                DISTANTHASHES[h] = chunkid
-                                flist.write(newdistantfileblock(chunkid=chunkid, mtime=mtime, fsize=fsize, h=h, fn=fn, key=key, salt=salt))
                         for fn in local_file_list:
                             fsize = get_size(fn)
                             if os.path.isdir(fn):
@@ -264,9 +292,11 @@ def backup(src=None, dest=None, sftppwd=None, encryptionpwd=None, exclusion_list
                                         DISTANTHASHES[h] = chunkid
                                         flist.write(newdistantfileblock(chunkid=chunkid, mtime=mtime, fsize=fsize, h=h, fn=fn, key=key, salt=salt))
                                     else:
-                                        thread = threading.Thread(target=_upload_large_file_thread,
-                                                                  args=(lock, fn, pbar, sftp, chunkid, flist,
-                                                                      REQUIREDCHUNKS, DISTANTHASHES),
+                                        thread = threading.Thread(target=threaded_upload,
+                                                                  args=(lock, fn, pbar, chunkid, flist,
+                                                                      REQUIREDCHUNKS, DISTANTHASHES,
+                                                                      mtime, fsize, h, key, salt,
+                                                                      host, user, sftppwd, extra_arg, remotepath),
                                                                   daemon=False)
                                         thread.start()
                                         threads.append(thread)
@@ -293,7 +323,6 @@ def backup(src=None, dest=None, sftppwd=None, encryptionpwd=None, exclusion_list
 def restore(src=None, dest=None,
         sftppwd=None, encryptionpwd=None,
         print_file_list=False,
-        verbose_file_list=True,
         only_print_file_list=False,
         include_regex=".*",
         exclude_regex='^/'):
@@ -307,13 +336,19 @@ def restore(src=None, dest=None,
             else:
                 break
     remote, user, host, path = parseaddress(src)
+    if host != "localhost":
+        extra_arg = {}
+    else:  # necessary argument for pysftp in case of local dest backup
+        cnopts = pysftp.CnOpts()
+        cnopts.hostkeys = None
+        extra_arg = {"cnopts":cnopts}
     if remote:
         if sftppwd is None:
             sftppwd = getpass.getpass(f'Please enter the SFTP password for user {user}: ')
         if not user or not host or not path:
             print('src should be either a local directory, or a remote using the following format: user@192.168.0.2:/path/to/backup/')
             return
-        src_cm = pysftp.Connection(host, username=user, password=sftppwd)
+        src_cm = pysftp.Connection(host, username=user, password=sftppwd, **extra_arg)
 
     else:
         src_cm = nullcontext()
@@ -329,66 +364,106 @@ def restore(src=None, dest=None,
         print('Restoring backup from %s: %s\nDestination local path: %s' % ('remote' if remote else 'local path', src, dest))
 
         with src_cm.open('.files', 'rb') as flist:
-            start = time.time()
-            print("Fetching remote file list...", end="")
-            n = len(flist.read())
-            print(f" (~{int(time.time() - start)}s)")
-            flist.seek(0)
+            print("Fetching remote file list...")
+            flist = io.BytesIO(flist.read())
 
-            pbar = tqdm(total=n,
-                    unit="B",
-                    dynamic_ncols=True,
-                    unit_scale=True,
-                    unit_divisor=1024,
-                    smoothing=0.1,
-                    desc="Constructing file list")
+            buf = []
             while True:
                 l = flist.read(4)
                 if not l:
                     break
                 length = int.from_bytes(l, byteorder='little')
                 s = flist.read(length)
-                pbar.update(length+4)
 
                 if len(s) != length:
                     print('An item of the remote file list (.files) is corrupt, ignored. Last sync interrupted?')
                     break
-                chunkid, mtime, fsize, h, fn = readdistantfileblock(s, encryptionpwd)
-                DISTANTFILES[fn] = [chunkid, mtime, fsize, h]
-                if DISTANTFILES[fn][0] == NULL16BYTES:  # deleted
-                    del DISTANTFILES[fn]
-                else:
-                    if only_print_file_list is True:
-                        tqdm.write(str(f"{fn}: {DISTANTFILES[fn]}"))
-                    elif verbose_file_list is True:
-                        tqdm.write(fn)
-        if only_print_file_list is True:
-            print("Done.")
-            raise SystemExit()
+                buf.append(s)
 
-        for fn, [chunkid, mtime, fsize, h] in tqdm(
-                DISTANTFILES.items(),
-                smoothing=0.1,
-                dynamic_ncols=True,
-                desc="Restoring files",
-                unit="file"):
+            def threaded_flist_decrypt(lock, pbar, s, encryptionpwd, DISTANTFILES):
+                """
+                decrypts flist content using multithreading
+                """
+                chunkid, mtime, fsize, h, fn = readdistantfileblock(s, encryptionpwd)
+                with lock:
+                    DISTANTFILES[fn] = [chunkid, mtime, fsize, h]
+                    if DISTANTFILES[fn][0] == NULL16BYTES:  # deleted
+                        del DISTANTFILES[fn]
+                pbar.update(len(s))
+
+            with tqdm(total=sum([len(s) for s in buf]),
+                      unit="B",
+                      dynamic_ncols=True,
+                      unit_scale=True,
+                      unit_divisor=1024,
+                      smoothing=0.1,
+                      desc="Decrypting file list") as pbar:
+                threads = []
+                lock = threading.Lock()
+                for ss in buf:
+                    if len(ss) <= SMALL_FILE:
+                        threaded_flist_decrypt(lock, pbar, ss, encryptionpwd,
+                                DISTANTFILES)
+                    else:
+                        thread = threading.Thread(target=threaded_flist_decrypt,
+                                                  args=(lock, pbar, ss,
+                                                        encryptionpwd,
+                                                        DISTANTFILES))
+                        thread.start()
+                        threads.append(thread)
+                        while sum([t.is_alive() for t in threads]) >= MAX_THREADS:
+                            time.sleep(0.5)
+                [t.join() for t in threads]
+            if only_print_file_list is True:
+                if only_print_file_list is True:
+                    with open("distant_file_list.txt", "a") as f:
+                        f.write(str([x["fn"] for x in DISTANTFILES]))
+                print("Written to file distant_file_list.txt")
+                raise SystemExit()
+
+        pbar = tqdm(total=sum([x[2] for x in DISTANTFILES.values()),
+                    smoothing=0.1,
+                    dynamic_ncols=True,
+                    desc="Restoring files",
+                    unit_scale=True,
+                    unit_divisor=1024,
+                    unit="B")
+        lock = threading.Lock()
+        threads = []
+
+        dist_list = sorted(list( DISTANTFILES.items()),
+                            key = lambda x : x[1][2],
+                            reverse = larger_files_first)
+        for fn, [chunkid, mtime, fsize, h] in dist_list:
             if re.match(include_regex, fn) is None:
-                tqdm.write(f"Skipping file: doesn't match inclusion rule: {fn}")
+                tqdm.write(f"Inclusion regex mismatch: {fn}")
                 break
             if re.match(exclude_regex, fn) is not None:
-                tqdm.write(f"Skipping file: matches exclusion rule: {fn}")
+                tqdm.write(f"Exclusion regex match: {fn}")
                 break
             f2 = os.path.join(dest, fn).replace('\\', '/')
             os.makedirs(os.path.dirname(f2), exist_ok=True)
             if os.path.exists(f2) and getsha256(f2) == h:
                 tqdm.write(f'Already present (same sha256). Skipping: {fn}')
                 continue
-            else:
+            if fsize <= SMALL_FILE:
                 tqdm.write(f'Restoring {fn}')
-            with open(f2, 'wb') as f, src_cm.open(chunkid.hex(), 'rb') as g:
-                decrypt(g, pwd=encryptionpwd, out=f)
-            os.utime(f2, ns=(os.stat(f2).st_atime_ns, mtime))
+                with open(f2, 'wb') as f, src_cm.open(chunkid.hex(), 'rb') as g:
+                    decrypt(g, pwd=encryptionpwd, out=f)
+                os.utime(f2, ns=(os.stat(f2).st_atime_ns, mtime))
+                pbar.update(fsize)
+            else:
+                thread = threading.Thread(target=threaded_restore,
+                        args=(f2, lock, pbar, chunkid, mtime, fn,
+                            host, user, sftppwd, encryptionpwd, extra_arg,
+                            path, fsize))
+                thread.start()
+                threads.append(thread)
+                while sum([t.is_alive() for t in threads]) >= MAX_THREADS:
+                    time.sleep(0.5)
+        pbar.close()
         print('Restore finished.')
+
 
 def console_script():
     """Command-line script"""
