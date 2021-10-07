@@ -6,7 +6,8 @@ Homepage and documentation: https://github.com/josephernest/nfreezer
 Copyright (c) 2020, Joseph Ernest. See also LICENSE file.
 
 ==TODO==
-* measure how long each step of restore() takes, then parallelize if needed
+* respect PEP8
+* switch from pysftp to paramiko, as the former is abandonned (security risk?)
 * implement rotating file log
 * flist.write should be accumulated in a buffer and added every 10s instead
     of being executed each time
