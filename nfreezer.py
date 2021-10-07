@@ -15,6 +15,14 @@ Copyright (c) 2020, Joseph Ernest. See also LICENSE file.
 * later: use a DEK + KEK schreme (data encryption key + key encryption key)
 * later: compact the destination file list database
 ==CHANGELOG==
+
+
+==TODO==
+* measure how long each step of restore() takes, then parallelize if needed
+* implement rotating file log
+* flist.write should be accumulated in a buffer and added every 10s instead
+    of being executed each time
+* investigate how to implement incremental backups
 """
 
 import pysftp, getpass, paramiko, glob, os, hashlib, io, Crypto.Random, Crypto.Protocol.KDF, Crypto.Cipher.AES, uuid, zlib, time, pprint, sys, contextlib, threading, re
@@ -226,7 +234,7 @@ def backup(src=None, dest=None, sftppwd=None, encryptionpwd=None, exclusion_list
                             with lock:
                                 REQUIREDCHUNKS.add(chunkid)
                                 DISTANTHASHES[h] = chunkid
-                                flist.write(newdistantfileblock(chunkid=chunkid, mtime=mtime, fsize=fsize, h=h, fn=fn, key=key, salt=salt))         # todo: accumulate in a buffer and do this every 10 seconds instead
+                                flist.write(newdistantfileblock(chunkid=chunkid, mtime=mtime, fsize=fsize, h=h, fn=fn, key=key, salt=salt))
                         for fn in local_file_list:
                             fsize = get_size(fn)
                             if os.path.isdir(fn):
@@ -255,7 +263,6 @@ def backup(src=None, dest=None, sftppwd=None, encryptionpwd=None, exclusion_list
                                     REQUIREDCHUNKS.add(chunkid) 
                                     pbar.update(fsize)
                                     flist.write(newdistantfileblock(chunkid=chunkid, mtime=mtime, fsize=fsize, h=h, fn=fn, key=key, salt=salt))
-                                     # todo: accumulate in a buffer and do this every 10 seconds instead
                                 else:
                                     tqdm.write(f'Uploading: {fn}')
                                     chunkid = uuid.uuid4().bytes
@@ -266,7 +273,6 @@ def backup(src=None, dest=None, sftppwd=None, encryptionpwd=None, exclusion_list
                                         REQUIREDCHUNKS.add(chunkid)
                                         DISTANTHASHES[h] = chunkid
                                         flist.write(newdistantfileblock(chunkid=chunkid, mtime=mtime, fsize=fsize, h=h, fn=fn, key=key, salt=salt))
-                                        # todo: accumulate in a buffer and do this every 10 seconds instead
                                     else:
                                         thread = threading.Thread(target=_upload_large_file_thread,
                                                                   args=(lock, fn, pbar, sftp, chunkid, flist,
