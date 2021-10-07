@@ -5,18 +5,6 @@ Homepage and documentation: https://github.com/josephernest/nfreezer
 
 Copyright (c) 2020, Joseph Ernest. See also LICENSE file.
 
-==CHANGELOG==
-* done: restore: if file already exists locally with same hash, skip the transfer
-* done: restore: restore original mtime_ns
-* done: PyPI ready
-* done: command-line script
-* done: encrypt/decrypt files bigger than RAM (work by blocks)
-* done: restore also from SFTP
-* later: use a DEK + KEK schreme (data encryption key + key encryption key)
-* later: compact the destination file list database
-==CHANGELOG==
-
-
 ==TODO==
 * measure how long each step of restore() takes, then parallelize if needed
 * implement rotating file log
