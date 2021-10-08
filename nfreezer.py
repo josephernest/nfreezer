@@ -424,7 +424,7 @@ def restore(src=None, dest=None,
                 print("Written to file distant_file_list.txt")
                 raise SystemExit()
 
-        pbar = tqdm(total=sum([x[2] for x in DISTANTFILES.values()),
+        pbar = tqdm(total=sum(x[2] for x in DISTANTFILES.values()),
                     smoothing=0.1,
                     dynamic_ncols=True,
                     desc="Restoring files",
