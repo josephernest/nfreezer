@@ -6,12 +6,13 @@ Homepage and documentation: https://github.com/josephernest/nfreezer
 Copyright (c) 2020, Joseph Ernest. See also LICENSE file.
 
 ==TODO==
-* move decrypt flist thread at the top
-* flist is faster in restoring that in backing up, so speed up backing up
 * implement a logfile
+
+* when backing up, use compiled regexp for the exclusion list
+* move decrypt flist thread at the top
+* use a pandas dataframe for .files, export as json (with values encrypted of course) every 10s instead of flist.write() at each turn
+* ability to sort by modification time when restoring or backing up
 * switch from pysftp to paramiko, as the former is abandonned (security risk?)
-* flist.write should be accumulated in a buffer and added every 10s instead
-    of being executed each time
 * respect PEP8, as keeping the number of lines small at the cost of coding
     conventions doesn't make much sense
 * investigate how to implement incremental backups
