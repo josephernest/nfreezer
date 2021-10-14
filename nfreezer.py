@@ -74,7 +74,7 @@ def encrypt(f=None, s=None, key=None, salt=None, out=None, pbar=None):
     out.seek(0)
     return out
 
-def decrypt(f=None, s=None, pwd=None, out=None):
+def decrypt(f=None, s=None, pwd=None, out=None, pbar=None):
     if out is None:
         out = io.BytesIO()
     if f is None:
@@ -90,6 +90,8 @@ def decrypt(f=None, s=None, pwd=None, out=None):
         if not block:
             break
         out.write(cipher.decrypt(block))
+        if pbar is not None:
+            pbar.update(BLOCKSIZE)
     try:
         cipher.verify(tag)
     except ValueError:
@@ -137,6 +139,8 @@ def threaded_upload(lock, fn, pbar, chunkid, flist,
         REQUIREDCHUNKS.add(chunkid)
         DISTANTHASHES[h] = chunkid
         flist.write(newdistantfileblock(chunkid=chunkid, mtime=mtime, fsize=fsize, h=h, fn=fn, key=key, salt=salt))
+    pbar.desc = str(int(pbar.desc[0])-1) + pbar.desc[1:]
+    return True
 
 
 def threaded_restore(f2, lock, pbar, chunkid, mtime, fn,
@@ -157,6 +161,8 @@ def threaded_restore(f2, lock, pbar, chunkid, mtime, fn,
     with lock:
         os.utime(f2, ns=(os.stat(f2).st_atime_ns, mtime))
     pbar.update(fsize)
+    pbar.desc = str(int(pbar.desc[0])-1) + pbar.desc[1:]
+    return True
 
 
 def backup(src=None, dest=None, sftppwd=None, encryptionpwd=None, exclusion_list=None):
@@ -253,7 +259,7 @@ def backup(src=None, dest=None, sftppwd=None, encryptionpwd=None, exclusion_list
                         else:
                             local_file_list.append(fn)
                     total_size = sum([get_size(x) for x in local_file_list])
-                    with tqdm(total=total_size, unit_scale=True, unit_divisor=1024, dynamic_ncols=True, smoothing=0.1, unit="B", mininterval=1, desc="nFreezer") as pbar:
+                    with tqdm(total=total_size, unit_scale=True, unit_divisor=1024, dynamic_ncols=True, smoothing=0.8, unit="B", mininterval=1, desc="0 nFreezer") as pbar:
                         threads = []
                         lock = threading.Lock()
                         for fn in local_file_list:
@@ -301,6 +307,7 @@ def backup(src=None, dest=None, sftppwd=None, encryptionpwd=None, exclusion_list
                                                                       mtime, fsize, h, key, salt,
                                                                       host, user, sftppwd, extra_arg, remotepath),
                                                                   daemon=False)
+                                        pbar.desc = str(int(pbar.desc[0])+1) + pbar.desc[1:]
                                         thread.start()
                                         threads.append(thread)
                                         while sum([t.is_alive() for t in threads]) >= MAX_THREADS:
@@ -427,7 +434,7 @@ def restore(src=None, dest=None,
         pbar = tqdm(total=sum(x[2] for x in DISTANTFILES.values()),
                     smoothing=0.1,
                     dynamic_ncols=True,
-                    desc="Restoring files",
+                    desc="0 Restoring files",
                     unit_scale=True,
                     unit_divisor=1024,
                     unit="B")
@@ -461,6 +468,7 @@ def restore(src=None, dest=None,
                             host, user, sftppwd, encryptionpwd, extra_arg,
                             path, fsize))
                 thread.start()
+                pbar.desc = str(int(pbar.desc[0])+1) + pbar.desc[1:]
                 threads.append(thread)
                 while sum([t.is_alive() for t in threads]) >= MAX_THREADS:
                     time.sleep(0.5)
