@@ -22,9 +22,9 @@ import pysftp, getpass, paramiko, glob, os, hashlib, io, Crypto.Random, Crypto.P
 from tqdm import tqdm
 
 NULL16BYTES, NULL32BYTES = b'\x00' * 16, b'\x00' * 32
-BLOCKSIZE = 16*1024*1024  # 16 MB
-larger_files_first = False
-MAX_THREADS = 5
+BLOCKSIZE = 16*1024*1024  # 8 MB
+larger_files_first = True
+MAX_THREADS = 4
 SMALL_FILE = 1048576 # 1024*1024*1  # threadings skips smaller files
 
 @contextlib.contextmanager  
