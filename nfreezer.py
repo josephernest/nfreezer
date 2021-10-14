@@ -298,11 +298,12 @@ def backup(src=None, dest=None, sftppwd=None, encryptionpwd=None, exclusion_list
                                     chunkid = uuid.uuid4().bytes
                                     if fsize <= SMALL_FILE:
                                         with sftp.open(chunkid.hex() + '.tmp', 'wb') as f_enc, open(fn, 'rb') as f:
-                                            encrypt(f, key=key, salt=salt, out=f_enc, pbar=pbar)
+                                            encrypt(f, key=key, salt=salt, out=f_enc, pbar=None)
                                             sftp.rename(chunkid.hex() + '.tmp', chunkid.hex())
                                         REQUIREDCHUNKS.add(chunkid)
                                         DISTANTHASHES[h] = chunkid
                                         flist.write(newdistantfileblock(chunkid=chunkid, mtime=mtime, fsize=fsize, h=h, fn=fn, key=key, salt=salt))
+                                        pbar.update(fsize)
                                     else:
                                         thread = threading.Thread(target=threaded_upload,
                                                                   args=(lock, fn, pbar, chunkid, flist,
