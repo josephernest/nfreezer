@@ -235,6 +235,8 @@ def backup(src=None, dest=None, sftppwd=None, encryptionpwd=None, exclusion_list
                             del DISTANTFILES[fn]
                         if chunkid in DISTANTCHUNKS:
                             DISTANTHASHES[h] = chunkid      # DISTANTHASHES[sha256_noencryption] = chunkid ; even if deleted file keep the sha256, it might be useful for moved/renamed files
+                else:
+                    print("Remote file list not found, creating a full backup")
                 for fn, distantfile in DISTANTFILES.items():
                     if not os.path.exists(fn):
                         print(f'  {fn} no longer exists (deleted or moved/renamed).')
