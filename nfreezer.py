@@ -26,6 +26,9 @@ BLOCKSIZE = 16*1024*1024  # 8 MB
 larger_files_first = True
 MAX_THREADS = 4
 SMALL_FILE = 1048576 # 1024*1024*1  # threadings skips smaller files
+red = "\033[91m"
+yel = "\033[93m"
+rst = "\033[0m"  # reset color
 
 @contextlib.contextmanager  
 def nullcontext():  # from contextlib import nullcontext for Python 3.7+
@@ -273,28 +276,28 @@ def backup(src=None, dest=None, sftppwd=None, encryptionpwd=None, exclusion_list
                             try:
                                 mtime = os.stat(fn).st_mtime_ns
                             except FileNotFoundError:
-                                tqdm.write(f"Not found, skipping: {fn}")
+                                tqdm.write(f"{yel}NFS: {fn}{rst}")  # not found, skipping
                                 pbar.update(fsize)
                                 continue
                             if fn in DISTANTFILES and DISTANTFILES[fn][1] >= mtime and DISTANTFILES[fn][2] == fsize:
-                                tqdm.write(f'Unmodified, skipping: {fn}')
+                                tqdm.write(f'US: {fn}')  # unmodified, skipping
                                 pbar.update(fsize)
                                 REQUIREDCHUNKS.add(DISTANTFILES[fn][0])
                             else:
                                 try:
                                     h = getsha256(fn)
                                 except OSError as e:
-                                    tqdm.write(f"UNIX special file? Skipping: {fn}")
+                                    tqdm.write(f"{yel}UNIX special file? Skipping: {fn}{rst}")
                                     pbar.update(fsize)
                                     continue
                                 if h in DISTANTHASHES:  # ex : chunk already there with same SHA256, but other filename  (case 1 : duplicate file, case 2 : renamed/moved file)
-                                    tqdm.write(f'Same hash, skipping: {fn}')
+                                    tqdm.write(f'SHS: {fn}')  # same hash, skipping
                                     chunkid = DISTANTHASHES[h]
                                     REQUIREDCHUNKS.add(chunkid) 
                                     pbar.update(fsize)
                                     flist.write(newdistantfileblock(chunkid=chunkid, mtime=mtime, fsize=fsize, h=h, fn=fn, key=key, salt=salt))
                                 else:
-                                    tqdm.write(f'Uploading: {fn}')
+                                    tqdm.write(f'{red}Up: {fn}{rst}')  # uploading
                                     chunkid = uuid.uuid4().bytes
                                     if fsize <= SMALL_FILE:
                                         with sftp.open(chunkid.hex() + '.tmp', 'wb') as f_enc, open(fn, 'rb') as f:
@@ -323,11 +326,10 @@ def backup(src=None, dest=None, sftppwd=None, encryptionpwd=None, exclusion_list
                     print(f'Deleting {len(delchunks)} no-longer-used distant chunks... ', end='')
                     for chunkid in delchunks:
                         sftp.remove(chunkid.hex())
-                    print('done.')
             print('Backup finished.')
             break
         except paramiko.ssh_exception.AuthenticationException:
-            print('Authentication failed.')
+            print(red + 'Authentication failed.' + rst)
             continue
         except paramiko.ssh_exception.SSHException as e:
             print(e, '\nPlease ssh your remote host at least once before, or add your remote to your known_hosts file.\n\n')  # todo: avoid ugly error messages after
@@ -390,7 +392,7 @@ def restore(src=None, dest=None,
                 s = flist.read(length)
 
                 if len(s) != length:
-                    print('An item of the remote file list (.files) is corrupt, ignored. Last sync interrupted?')
+                    print(red + 'An item of the remote file list (.files) is corrupt, ignored. Last sync interrupted?' + rst)
                     break
                 buf.append(s)
 
@@ -458,10 +460,10 @@ def restore(src=None, dest=None,
             f2 = os.path.join(dest, fn).replace('\\', '/')
             os.makedirs(os.path.dirname(f2), exist_ok=True)
             if os.path.exists(f2) and getsha256(f2) == h:
-                tqdm.write(f'Already present (same sha256). Skipping: {fn}')
+                tqdm.write(f'{yel}APS: {fn}{rst}')  # already present, skipping
                 continue
             if fsize <= SMALL_FILE:
-                tqdm.write(f'Restoring {fn}')
+                tqdm.write(f'{red}R: {fn}{rst}')  # restoring
                 with open(f2, 'wb') as f, src_cm.open(chunkid.hex(), 'rb') as g:
                     decrypt(g, pwd=encryptionpwd, out=f)
                 os.utime(f2, ns=(os.stat(f2).st_atime_ns, mtime))
