@@ -319,12 +319,15 @@ def backup(src=None, dest=None, sftppwd=None, encryptionpwd=None, exclusion_list
                                         threads.append(thread)
                                         while sum([t.is_alive() for t in threads]) >= MAX_THREADS:
                                             time.sleep(0.5)
+                        if sum([t.is_alive() for t in threads]) > 0:
+                            print("Waiting for threads to finish...")
                         [t.join() for t in threads]
-                    pbar.close()
+                print("Listing chunks to delete...")
                 delchunks = DISTANTCHUNKS - REQUIREDCHUNKS
                 if len(delchunks) > 0:
-                    print(f'Deleting {len(delchunks)} no-longer-used distant chunks... ', end='')
-                    for chunkid in delchunks:
+                    for chunkid in tqdm(delchunks,
+                                   desc=f'Deleting {len(delchunks)} no-longer-used distant chunks... '
+                                ):
                         sftp.remove(chunkid.hex())
             print('Backup finished.')
             break
