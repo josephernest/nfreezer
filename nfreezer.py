@@ -189,8 +189,6 @@ def backup(src=None, dest=None, sftppwd=None, encryptionpwd=None, exclusion_list
         print('dest should use the following format: user@192.168.0.2:/path/to/backup/')
         return
     print(f'Starting backup...\nSource path: {src}\nDestination host: {host}\nDestination path: {remotepath}')
-    if sftppwd is None:
-        sftppwd = getpass.getpass(f'Please enter the SFTP password for user {user}: ')
     if encryptionpwd is None:
         while True:
             encryptionpwd = getpass.getpass('Please enter the encryption password: ')
@@ -201,6 +199,8 @@ def backup(src=None, dest=None, sftppwd=None, encryptionpwd=None, exclusion_list
                 break
     key, salt = KDF(encryptionpwd)        
     for counter in range(5):
+        if sftppwd is None:
+            sftppwd = getpass.getpass(f'Please enter the SFTP password for user {user}: ')
         try:
             with pysftp.Connection(host, username=user, password=sftppwd, **extra_arg) as sftp:
                 if sftp.isdir(remotepath):
