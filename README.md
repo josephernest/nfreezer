@@ -1,7 +1,5 @@
 # nFreezer
 
-https://nfreezer.com
-
 ![](https://user-images.githubusercontent.com/6168083/100474871-f8825d00-30e1-11eb-8e74-6321aafe2151.png)
 
 **nFreezer** (for *e<b>n</b>crypted freezer*) is an **encrypted-at-rest backup tool**, designed specifically for the case when the destination server is *untrusted*. With nFreezer, the data is safe on the destination server **even** if a malicious user gets root access to it.  
@@ -98,5 +96,3 @@ I am currently sponsored by [CodeSigningStore.com](https://codesigningstore.com)
 ## License
 
 MIT with free-of-charge-redistribution clause, see the LICENSE file.
-
-![](https://nfreezer.com/pixel/nfreezer.png)
